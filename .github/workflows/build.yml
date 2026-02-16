@@ -1,0 +1,66 @@
+name: Build SideBackup
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '*.*.*'
+
+jobs:
+  build:
+    name: Build and Archive
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install Dependencies
+        run: brew install xcbeautify xz
+
+      - name: Determine Build Type
+        id: build_type
+        run: |
+          if [[ "${GITHUB_REF}" == ref/tags/* ]]; then
+            echo "type=release" >> $GITHUB_OUTPUT
+          else
+            echo "type=nightly" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build
+        run: ./.github/makeipa ${{ steps.build_type.outputs.type }}
+
+      - name: Upload nightly
+        if: steps.build_type.outputs.type == 'nightly'
+        uses: IsaacShelton/update-existing-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release: nightly
+          replace: true
+          files: build/*
+          prerelease: true
+          tag: nightly
+          body: |
+            Automated nightly build from commit ${{ github.sha }}
+
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.event.head_commit.message }}
+            **Built:** ${{ github.event.head_commit.timestamp }}
+
+      - name: Upload Release
+        if: steps.build_type.outputs.type == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

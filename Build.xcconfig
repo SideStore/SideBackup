@@ -5,18 +5,37 @@ MARKETING_VERSION = 0.0.0
 CURRENT_PROJECT_VERSION = 0000
 
 // Vars to be overwritten by `CodeSigning.xcconfig` if exists
+ORG = io.SideStore
 DEVELOPMENT_TEAM = HXY2D2FQXT
-ORG_IDENTIFIER = io.SideStore
-
 CODE_SIGN_STYLE = Automatic
-DEVELOPMENT_TEAM[config=Archive] = XYZ0123456
+
+// Vars that allow anyone to export a build via 'Product > Archive' in Xcode
 CODE_SIGN_STYLE[config=Archive] = Manual
-CODE_SIGNING_REQUIRED[config=Archive] = NO
+DEVELOPMENT_TEAM[config=Archive] = XYZ0123456
+CODE_SIGN_IDENTITY[config=Archive] = -
+CODE_SIGNING_ALLOWED[config=Archive] = YES
+CODE_SIGNING_REQUIRED[config=Archive] = YES
 AD_HOC_CODE_SIGNING_ALLOWED[config=Archive] = YES
-CODE_SIGNING_ALLOWED[config=Archive] = NO
 
 // Codesigning settings defined optionally, see `CodeSigning.xcconfig.example`
 #include? "CodeSigning.xcconfig"
+
+PRODUCT_NAME = SideBackup
+
+INFOPLIST_FILE = $(PRODUCT_NAME)/Info.plist
+CODE_SIGN_ENTITLEMENTS = $(PRODUCT_NAME)/$(PRODUCT_NAME).entitlements
+
+PRODUCT_BUNDLE_IDENTIFIER[config=*] = $(ORG).$(DEVELOPMENT_TEAM).$(PRODUCT_NAME)
+// we set without a Team ID when archiving
+PRODUCT_BUNDLE_IDENTIFIER[config=Archive] = $(ORG).$(PRODUCT_NAME)
+
+GROUP_ID = com.SideStore.SideStore.$(DEVELOPMENT_TEAM)
+ALT_GROUP_ID = com.rileytestut.AltStore.$(DEVELOPMENT_TEAM)
+GROUP_ID[config=Archive] = com.SideStore.SideStore
+ALT_GROUP_ID[config=Archive] = com.rileytestut.AltStore
+
+EXTENSION_PREFIX            = $(PRODUCT_BUNDLE_IDENTIFIER)
+ICLOUD_CONTAINER_IDENTIFIER = iCloud.$(ORG).$(PRODUCT_NAME)
 
 SWIFT_VERSION = 6.0
 
@@ -28,6 +47,7 @@ TARGETED_DEVICE_FAMILY = 1,2
 GENERATE_INFOPLIST_FILE = YES
 STRING_CATALOG_GENERATE_SYMBOLS = YES
 SWIFT_EMIT_LOC_STRINGS = YES
+MERGED_BINARY_TYPE = automatic
 
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
@@ -44,24 +64,8 @@ INFOPLIST_KEY_UILaunchScreen_Generation = YES
 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
 INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES
 
-ORIENTATIONS = UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
-INFOPLIST_KEY_UISupportedInterfaceOrientations        = $(ORIENTATIONS)
-INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = $(ORIENTATIONS)
-INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad   = $(ORIENTATIONS)
-
-ORG_PREFIX = $(ORG_IDENTIFIER)
-
-PRODUCT_NAME = SideBackup
-INFOPLIST_FILE = SideBackup/Info.plist
-
-PRODUCT_BUNDLE_IDENTIFIER = $(ORG_IDENTIFIER).$(DEVELOPMENT_TEAM).$(PRODUCT_NAME)
-PRODUCT_BUNDLE_IDENTIFIER[config=Archive] = $(ORG_IDENTIFIER).$(PRODUCT_NAME)
-
-GROUP_ID = $(ORG_IDENTIFIER).$(DEVELOPMENT_TEAM)
-
-EXTENSION_PREFIX            = $(PRODUCT_BUNDLE_IDENTIFIER)
-APP_GROUP_IDENTIFIER        = $(GROUP_ID)
-ICLOUD_CONTAINER_IDENTIFIER = iCloud.$(ORG_PREFIX).$(PRODUCT_NAME)
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 
 // Suppress noise from os activity in xcode console log for release builds
 DEBUG_ACTIVITY_MODE = disable

@@ -1,2 +1,4 @@
 CodeSigning.xcconfig
 xcuserdata/
+*.xcarchive
+build/

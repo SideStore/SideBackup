@@ -62,6 +62,24 @@ struct ContentView: View {
             }
         }
         .padding()
+        .onAppear {
+            URL.groupContainers.forEach { id, url in
+                print("\(id): \(url.path)")
+                let fm: FileManager = .default
+                var allFiles: Set<URL> = []
+                if let files = fm.enumerator(atPath: url.path) {
+                    for case let f as String in files {
+                        let file = URL(file: f, relative: url)
+                        allFiles.insert(file)
+                    }
+                }
+                allFiles.forEach { print($0.relativeString) }
+            }
+            print(URL.groupContainers)
+        }
+        .onOpenURL { url in
+            print(url)
+        }
     }
 }
 

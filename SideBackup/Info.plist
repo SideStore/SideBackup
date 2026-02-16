@@ -3,6 +3,19 @@
 <plist version="1.0">
 <dict>
 	<key>ALTBundleIdentifier</key>
-	<string>com.kdt.livecontainer</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sidebackup</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

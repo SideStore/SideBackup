@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -e
+
+_main() {
+  local BDT="${1:-nightly}"
+  local APP="${2:-SideBackup}"
+  local OUT="build.xcarchive/Products/Applications/$APP.app"
+  local SDR="build.xcarchive/dSYMs"
+  local SYM="$APP.app.dSYM"
+  local BVR=$(grep 'MARKETING' Build.xcconfig | awk '{ print $3 }')
+  local BARGS="archive\
+ -scheme $APP\
+ -archivePath build.xcarchive\
+ -destination generic/platform=iOS"
+  if [[ "$BDT" == "release" ]]; then
+    local VER="$BVR"
+    local ARGS="$BARGS"
+    local OPA="build/$APP.ipa"
+  else
+    local VER="$BVR-nightly.$(date +'%y.%m.%d_%H.%M')+$(git rev-parse --short HEAD)"
+    local ARGS="$BARGS MARKETING_VERSION=$VER"
+    local OPA="build/$APP.$VER.ipa"
+  fi
+
+  _mkipa() {
+    p=Payload
+    mkdir $p
+    mv "${1%.*}.app" $p
+    zip -qr9 "${1%.*}.ipa" $p
+    rm -r $p
+  }
+
+  [[ -d "build" ]] && rm -r build || true && mkdir build
+  [[ -f "build.xcarchive" ]] && rm -r build.xcarchive
+  echo "::group::Build $BDT"
+  echo "[$VER] Building.."
+  set -o pipefail && xcodebuild $ARGS | tee "build/$VER.log" | xcbeautify --renderer github-actions
+  echo "[$VER] Archiving.."
+  xz -e "build/$VER.log"
+  _mkipa "$OUT"
+  tar cf "build/$SYM.$VER.tar" -C "$SDR" "$SYM"
+  xz -e "build/$SYM.$VER.tar"
+  mv "${OUT%.*}.ipa" "$OPA"
+  rm -r build.xcarchive
+  #tar cvJf "build.$VER.tar.xz" build
+  echo "[$VER] Done!"
+  echo "::endgroup::"
+}
+
+_main "$@"
