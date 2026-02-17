@@ -6,6 +6,14 @@ on:
       - '**'
     tags:
       - '*.*.*'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - '**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -13,6 +21,15 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Determine Build Type
+        id: build_type
+        run: |
+          if [[ "${GITHUB_REF}" == ref/tags/* ]]; then
+            echo "type=release" >> $GITHUB_OUTPUT
+          else
+            echo "type=nightly" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -23,17 +40,13 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Determine Build Type
-        id: build_type
-        run: |
-          if [[ "${GITHUB_REF}" == ref/tags/* ]]; then
-            echo "type=release" >> $GITHUB_OUTPUT
-          else
-            echo "type=nightly" >> $GITHUB_OUTPUT
-          fi
+      - uses: irgaly/xcode-cache@v1.9.2
+        with:
+          key: xcode-cache-deriveddata-${{ github.steps.build_type.outputs.type }}-${{ github.base_ref }}
+          restore-keys: xcode-cache-dereviddata-${{ github.steps.build_type.outputs.type }}-${{ github.base_ref }}
 
       - name: Build
-        run: ./.github/makeipa ${{ steps.build_type.outputs.type }}
+        run: ./.github/makeipa ${{ steps.build_type.outputs.type }} ${{ github.head_ref }}
 
       - name: Get Artifacts
         id: artifacts
@@ -64,7 +77,7 @@ jobs:
           compression-level: 0
 
       - name: Upload nightly
-        if: steps.build_type.outputs.type == 'nightly'
+        if: github.ref_name == 'main' || github.ref_name == 'develop'
         uses: altemiq/update-existing-release@v1.3.5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -84,7 +97,7 @@ jobs:
             **Built:** ${{ github.event.head_commit.timestamp }}
 
       - name: Upload Release
-        if: steps.build_type.outputs.type == 'release'
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2.5.0
         with:
           files: |
@@ -95,3 +108,50 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload PR Comment
+        uses: actions/github-script@v8
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        with:
+          # This snippet is public-domain, taken from
+          # https://github.com/oprypin/nightly.link/blob/master/.github/workflows/pr-comment.yml
+          # slightly modified by nythepegasus
+          script: |
+            async function upsertComment(owner, repo, issue_number, purpose, body) {
+              const {data: comments} = await github.rest.issues.listComments(
+                {owner, repo, issue_number});
+
+              const marker = `<!-- bot: ${purpose} -->`;
+              body = marker + "\n" + body;
+
+              const existing = comments.filter((c) => c.body.includes(marker));
+              if (existing.length > 0) {
+                const last = existing[existing.length - 1];
+                core.info(`Updating comment ${last.id}`);
+                await github.rest.issues.updateComment({
+                  owner, repo,
+                  body,
+                  comment_id: last.id,
+                });
+              } else {
+                core.info(`Creating a comment in issue / PR #${issue_number}`);
+                await github.rest.issues.createComment({issue_number, body, owner, repo});
+              }
+            }
+
+            const {owner, repo} = context.repo;
+            const run_id = ${{ github.run_id }};
+
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts, {owner, repo, run_id});
+            if (!artifacts.length) {
+              return core.error(`No artifacts found`);
+            }
+            let body = `Download the artifacts for this pull request:\n`;
+            for (const art of artifacts) {
+              body += `\n* [${art.name}.zip](https://nightly.link/${owner}/${repo}/actions/artifacts/${art.id}.zip)`;
+            }
+
+            core.info("Review thread message body:", body);
+
+            await upsertComment(owner, repo, ${{ github.event.pull_request.number }}, "nightly-link", body);
