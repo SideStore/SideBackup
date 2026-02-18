@@ -3,15 +3,34 @@
 set -e
 
 _main() {
+:<<'COMMENT'
+  Inputs from env
+   - RELEASE: release/nightly (default nightly)
+   - XCCONFIG: relative/path/to/xcconfig
+     - default behavior is to search for an xcconfig file that defines '^MARKETING_VERSION ='
+       e.g. MARKETING_VERSION must appear at the beginning of a line within the file
+   - PRODUCT_NAME: name of the scheme/app to build and archive
+   - MARKETING_VERSION: current version to set build output to
+COMMENT
+  _ghtee() {
+    local INP=$(</dev/stdin)
+    if [[ -n "$GITHUB_SHA" ]]; then
+      tee -a "$1"
+    else
+      if [[ ! "$1" = *null ]] && [[ ! "$2" = *null ]]; then
+        echo $INP
+      fi
+    fi
+  }
   _mkipa() {
     p=Payload
-    mkdir $p
+    [[ -d "$p" ]] && rm -fr $p || true && mkdir $p
     mv "$1.app" $p
-    zip -qr9 "$1.ipa" $p
-    rm -r $p
+    zip -r9 "$1.ipa" $p
   }
 
-  local BUILD_TYPE="${1:-nightly}"
+  local BUILD_TYPE="${RELEASE:-nightly}"
+  if [[ ! "$BUILD_TYPE" = nightly ]]; then BUILD_TYPE="release"; fi
   if [[ -n "$GITHUB_REF" ]]; then
     if [[ "$GITHUB_REF" = ref/tags/* ]]; then
       local BUILD_TYPE="release"
@@ -24,38 +43,59 @@ _main() {
   fi
   COMMIT="${COMMIT:0:8}"
   BRANCH="$(echo $BRANCH | sed 's/\//_/g')"
-  local APP="${2:-$(basename *xcodeproj .xcodeproj)}"
+  local XCCONFIG="${XCCONFIG:=$(grep -r '^MARKETING_VERSION =' --include '*.xcconfig' . | awk -F: '{ print $1 }')}"
+  if [[ -z "$XCCONFIG" ]]; then
+    if [[ -z "$PRODUCT_NAME" ]]; then
+      local EPOS="::error file=.github/makeipa,line=36,col=14,endColumn=29,title=Missing PRODUCT_NAME!::"
+      local EMSG="$EPOS Must set PRODUCT_NAME in env or in a valid xcconfig!"
+    fi
+    if [[ -z "$MARKETING_VERSION" ]]; then
+      local EPOS="::error file=.github/makeipa,line=37,col=14,endColumn=34,title=Missing MARKETING_VERSION!::"
+      local EMSG="$EPOS Must set MARKETING_VERSION in env or in a valid xcconfig!"
+    fi
+    local APP="$PRODUCT_NAME"
+    local VER="$MARKETING_VERSION"
+  else
+    local VER="${MARKETING_VERSION:-$(grep '^MARKETING_VERSION =' $XCCONFIG | awk '{ print $3 }')}"
+    local APP="${PRODUCT_NAME:-$(grep '^PRODUCT_NAME' $XCCONFIG | awk '{ print $3 }')}"
+    local APP="${APP:-$(basename *xcodeproj .xcodeproj)}"
+    if [[ -z "$VER" ]]; then
+      local EPOS="::error file=.github/makeipa,line=40,col=14,endColumn=89,title=Missing MARKETING_VERSION!::"
+      local EMSG="$EPOS Must set MARKETING_VERSION in env or in a valid xcconfig!"
+    fi
+    if [[ -z "$APP" ]]; then
+      local EPOS="::error file=.github/makeipa,line=42,col=14,endColumn=57,title=Missing PRODUCT_NAME!::"
+      local EMSG="$EPOS Must set PRODUCT_NAME in env or in a valid xcconfig!"
+    fi
+  fi
+  [[ -n "$EMSG" ]] && ( echo $EMSG && exit 1 )
   local XCARCHIVE="${XCARCHIVE:-$APP.xcarchive}"
   local BUILDOUT="$XCARCHIVE/Products/Applications/$APP"
   local DSYM="$APP.app.dSYM"
-  local VER="$(grep 'MARKETING' Build.xcconfig | awk '{ print $3 }')"
   local ARGS="archive -scheme $APP -archivePath $XCARCHIVE -destination generic/platform=iOS"
   if [[ "$BUILD_TYPE" = nightly ]]; then
-    VER="$(date +'%y%m%d%H%M')+$VER+$BRANCH+$COMMIT"
-    ARGS="$ARGS MARKETING_VERSION=$VER"
+    ARGS="$ARGS MARKETING_VERSION=$(date +'%y%m%d%H%M')+$VER+$BRANCH+$COMMIT"
   fi
   local LOG="build/$VER.log"
   local OUTIPA="build/$APP.$VER.ipa"
   local DSYMTAR="build/$DSYM.$VER.tar"
 
-  [[ -d "build" ]] && rm -r build || true && mkdir build
-  [[ -d "$XCARCHIVE" ]] && rm -r $XCARCHIVE
+  [[ -d "build" ]] && rm -fr build || true && mkdir build
+  [[ -d "$XCARCHIVE" ]] && rm -fr $XCARCHIVE
   echo "::group:: Building $BUILD_TYPE"
-  echo "[$VER] Building.."
+  echo "[$VER] Building.." | _ghtee "$GITHUB_STEP_SUMMARY"
   NSUnbufferedIO=YES set -o pipefail && xcodebuild $ARGS 2>&1 | tee "$LOG" | xcbeautify --renderer github-actions
-  echo "[$VER] Archiving.."
+  echo "[$VER] Archiving.." | _ghtee "$GITHUB_STEP_SUMMARY"
   xz -e "$LOG"
-  tar cf "$DSYMTAR" -C "$XCARCHIVE/dSYMs" "$DSYM"
+  tar cvf "$DSYMTAR" -C "$XCARCHIVE/dSYMs" "$DSYM" 2>&1 | _ghtee $GITHUB_STEP_SUMMARY null
   xz -e "$DSYMTAR"
-  _mkipa "$BUILDOUT"
+  _mkipa "$BUILDOUT" | _ghtee $GITHUB_STEP_SUMMARY null
   mv "$BUILDOUT.ipa" "$OUTIPA"
-  rm -r "$XCARCHIVE"
-  if [[ -n "$GITHUB_SHA" ]]; then
-    echo "log=$(basename $LOG.xz)" >> $GITHUB_OUTPUT
-    echo "sym=$(basename $DSYMTAR.xz)" >> $GITHUB_OUTPUT
-    echo "ipa=$(basename $OUTIPA)" >> $GITHUB_OUTPUT
-  fi
-  echo "[$VER] Done!"
+  rm -fr "$XCARCHIVE"
+  echo "log=$(basename $LOG.xz)" | _ghtee $GITHUB_OUTPUT null
+  echo "sym=$(basename $DSYMTAR.xz)" | _ghtee $GITHUB_OUTPUT null
+  echo "ipa=$(basename $OUTIPA)" | _ghtee $GITHUB_OUTPUT null
+  echo "[$VER] Done!" | _ghtee $GITHUB_STEP_SUMMARY
   echo "::endgroup::"
 }
 
