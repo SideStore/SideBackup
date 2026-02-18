@@ -74,7 +74,8 @@ COMMENT
   local DSYM="$APP.app.dSYM"
   local ARGS="archive -scheme $APP -archivePath $XCARCHIVE -destination generic/platform=iOS"
   if [[ "$BUILD_TYPE" = nightly ]]; then
-    ARGS="$ARGS MARKETING_VERSION=$(date +'%y%m%d%H%M')+$VER+$BRANCH+$COMMIT"
+    VER="$(date +'%y%m%d%H%M')+$VER+$BRANCH+$COMMIT"
+    ARGS="$ARGS MARKETING_VERSION=$VER"
   fi
   local LOG="build/$VER.log"
   local OUTIPA="build/$APP.$VER.ipa"
@@ -83,9 +84,9 @@ COMMENT
   [[ -d "build" ]] && rm -fr build || true && mkdir build
   [[ -d "$XCARCHIVE" ]] && rm -fr $XCARCHIVE
   echo "::group:: Building $BUILD_TYPE"
-  echo "[$VER] Building.." | _ghtee "$GITHUB_STEP_SUMMARY"
+  echo "### [$VER] Building $BUILD_TYPE.." | _ghtee "$GITHUB_STEP_SUMMARY"
   NSUnbufferedIO=YES set -o pipefail && xcodebuild $ARGS 2>&1 | tee "$LOG" | xcbeautify --renderer github-actions
-  echo "[$VER] Archiving.." | _ghtee "$GITHUB_STEP_SUMMARY"
+  echo "### [$VER] Archiving $BUILD_TYPE.." | _ghtee "$GITHUB_STEP_SUMMARY"
   xz -e "$LOG"
   tar cvf "$DSYMTAR" -C "$XCARCHIVE/dSYMs" "$DSYM" 2>&1 | _ghtee $GITHUB_STEP_SUMMARY null
   xz -e "$DSYMTAR"
