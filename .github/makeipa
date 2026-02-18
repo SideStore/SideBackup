@@ -15,7 +15,7 @@ COMMENT
   _ghtee() {
     local INP=$(</dev/stdin)
     if [[ -n "$GITHUB_SHA" ]]; then
-      tee -a "$1"
+      echo $INP | tee -a "$1"
     else
       if [[ ! "$1" = *null ]] && [[ ! "$2" = *null ]]; then
         echo $INP
