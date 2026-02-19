@@ -36,6 +36,10 @@ COMMENT
     echo "<summary>$1</summary>" | _ghtee $GITHUB_STEP_SUMMARY null
     echo "<ul>" | _ghtee $GITHUB_STEP_SUMMARY null
   }
+  _lend() {
+    echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
+    echo "</details>" | _ghtee $GITHUB_STEP_SUMMARY null
+  }
   _mkipa() {
     p=Payload
     [[ -d "$p" ]] && rm -fr $p || true && mkdir $p
@@ -104,18 +108,18 @@ COMMENT
   xz -e "$LOG"
   _lhead "$(basename $DSYMTAR.xz) contents"
   tar cvf "$DSYMTAR" -C "$XCARCHIVE/dSYMs" "$DSYM" 2>&1 | _ghtee $GITHUB_STEP_SUMMARY '<li>line</li>' null
-  echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
+  _lend
   xz -e "$DSYMTAR"
   _lhead "$(basename $OUTIPA) contents"
   _mkipa "$BUILDOUT" | _ghtee $GITHUB_STEP_SUMMARY '<li>line</li>' null
-  echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
+  _lend
   mv "$BUILDOUT.ipa" "$OUTIPA"
   rm -fr "$XCARCHIVE"
   _lhead "Artifacts to be uploaded:" ' open'
   echo "<li>$(basename $LOG.xz)</li>" | _ghtee $GITHUB_STEP_SUMMARY null
   echo "<li>$(basename $DSYMTAR.xz)</li>" | _ghtee $GITHUB_STEP_SUMMARY null
   echo "<li>$(basename $OUTIPA)</li>" | _ghtee $GITHUB_STEP_SUMMARY null
-  echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
+  _lend
   echo "log=$(basename $LOG.xz)" | _ghtee $GITHUB_OUTPUT null
   echo "sym=$(basename $DSYMTAR.xz)" | _ghtee $GITHUB_OUTPUT null
   echo "ipa=$(basename $OUTIPA)" | _ghtee $GITHUB_OUTPUT null
