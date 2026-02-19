@@ -13,14 +13,28 @@ _main() {
    - MARKETING_VERSION: current version to set build output to
 COMMENT
   _ghtee() {
-    local INP=$(</dev/stdin)
-    if [[ -n "$GITHUB_SHA" ]]; then
-      echo $INP | tee -a "$1"
-    else
-      if [[ ! "$1" = *null ]] && [[ ! "$2" = *null ]]; then
-        echo $INP
+    while IFS= read -r line; do
+      if [[ -n "$GITHUB_SHA" ]]; then
+        if [[ -n "$2" ]] && [[ ! $2 = *null ]]; then
+          echo "${2/line/$line}" | tee -a "$1"
+        else
+          echo $line | tee -a "$1"
+        fi
+      else
+        if [[ ! "$*" == *null* ]]; then
+          if [[ -n "$1" ]]; then
+            echo "${1/line/$line}"
+          else
+            echo "$line"
+          fi
+        fi
       fi
-    fi
+    done
+  }
+  _lhead() {
+    echo "<details$2>" | _ghtee $GITHUB_STEP_SUMMARY null
+    echo "<summary>$1</summary>" | _ghtee $GITHUB_STEP_SUMMARY null
+    echo "<ul>" | _ghtee $GITHUB_STEP_SUMMARY null
   }
   _mkipa() {
     p=Payload
@@ -84,19 +98,28 @@ COMMENT
   [[ -d "build" ]] && rm -fr build || true && mkdir build
   [[ -d "$XCARCHIVE" ]] && rm -fr $XCARCHIVE
   echo "::group:: Building $BUILD_TYPE"
-  echo "### [$VER] Building $BUILD_TYPE.." | _ghtee "$GITHUB_STEP_SUMMARY"
+  echo "### [$VER] Building $BUILD_TYPE $(date -u +"%Y-%m-%dT%H:%M:%SZ").." | _ghtee "$GITHUB_STEP_SUMMARY"
   NSUnbufferedIO=YES set -o pipefail && xcodebuild $ARGS 2>&1 | tee "$LOG" | xcbeautify --renderer github-actions
-  echo "### [$VER] Archiving $BUILD_TYPE.." | _ghtee "$GITHUB_STEP_SUMMARY"
+  echo "### [$VER] Archiving $BUILD_TYPE $(date -u +"%Y-%m-%dT%H:%M:%SZ").." | _ghtee "$GITHUB_STEP_SUMMARY"
   xz -e "$LOG"
-  tar cvf "$DSYMTAR" -C "$XCARCHIVE/dSYMs" "$DSYM" 2>&1 | _ghtee $GITHUB_STEP_SUMMARY null
+  _lhead "$(basename $DSYMTAR.xz) contents"
+  tar cvf "$DSYMTAR" -C "$XCARCHIVE/dSYMs" "$DSYM" 2>&1 | _ghtee $GITHUB_STEP_SUMMARY '<li>line</li>' null
+  echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
   xz -e "$DSYMTAR"
-  _mkipa "$BUILDOUT" | _ghtee $GITHUB_STEP_SUMMARY null
+  _lhead "$(basename $OUTIPA) contents"
+  _mkipa "$BUILDOUT" | _ghtee $GITHUB_STEP_SUMMARY '<li>line</li>' null
+  echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
   mv "$BUILDOUT.ipa" "$OUTIPA"
   rm -fr "$XCARCHIVE"
+  _lhead "Artifacts to be uploaded:" ' open'
+  echo "<li>$(basename $LOG.xz)</li>" | _ghtee $GITHUB_STEP_SUMMARY null
+  echo "<li>$(basename $DSYMTAR.xz)</li>" | _ghtee $GITHUB_STEP_SUMMARY null
+  echo "<li>$(basename $OUTIPA)</li>" | _ghtee $GITHUB_STEP_SUMMARY null
+  echo "</ul>" | _ghtee $GITHUB_STEP_SUMMARY null
   echo "log=$(basename $LOG.xz)" | _ghtee $GITHUB_OUTPUT null
   echo "sym=$(basename $DSYMTAR.xz)" | _ghtee $GITHUB_OUTPUT null
   echo "ipa=$(basename $OUTIPA)" | _ghtee $GITHUB_OUTPUT null
-  echo "[$VER] Done!" | _ghtee $GITHUB_STEP_SUMMARY
+  echo "[$VER] Done $(date -u +"%Y-%m-%dT%H:%M:%SZ")!" | _ghtee $GITHUB_STEP_SUMMARY
   echo "::endgroup::"
 }
 
