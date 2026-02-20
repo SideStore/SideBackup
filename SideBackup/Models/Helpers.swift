@@ -177,99 +177,71 @@ func SecTaskCopyValuesForEntitlements(
     _ error: UnsafeMutablePointer<Unmanaged<CFError>?>?
 ) -> CFDictionary?
 
-func releaseSecTask(_ task: SecTaskRef) {
-    let cf = unsafeBitCast(task, to: CFTypeRef.self)
-    CFRelease(cf)
+func withSecTask(_ block: @escaping (SecTaskRef) -> Void) {
+    guard let task = SecTaskCreateFromSelf(nil) else { return }
+    block(task)
+    CFRelease(unsafeBitCast(task, to: CFTypeRef.self))
+
+}
+
+func withSecEntitlements(for entitlements: [String], _ block: @escaping (CFDictionary) -> Void) {
+    withSecTask { task in
+        if let entitlements = SecTaskCopyValuesForEntitlements(task, entitlements as CFArray, nil) {
+            block(entitlements)
+        }
+    }
+}
+
+func withSecEntitlement(for entitlement: String, _ block: @escaping (CFTypeRef) -> Void) {
+    withSecTask { task in
+        if let entitlement = SecTaskCopyValueForEntitlement(task, entitlement as NSString, nil) {
+            block(entitlement)
+        }
+    }
 }
 
 func checkAppEntitlements(_ ents: [String]) -> [String: Any] {
-    guard let task = SecTaskCreateFromSelf(nil) else {
-        return [:]
+    var ret: [String: Any] = [:]
+    withSecEntitlements(for: ents) { entitlements in
+        ret = (entitlements as NSDictionary) as? [String: Any] ?? [:]
     }
-    defer {
-        releaseSecTask(task)
-    }
-
-    guard let entitlements = SecTaskCopyValuesForEntitlements(task, ents as CFArray, nil) else {
-        return [:]
-    }
-
-    return (entitlements as NSDictionary) as? [String: Any] ?? [:]
+    return ret
 }
 
 func checkAppEntitlement(_ ent: String) -> Bool {
-    guard let task = SecTaskCreateFromSelf(nil) else {
-        return false
+    var ret: Bool = false
+    withSecEntitlement(for: ent) { entitlement in
+        if let num = entitlement as? NSNumber {
+            ret = num.boolValue
+        } else if let bool = entitlement as? Bool {
+            ret = bool
+        }
     }
-    defer {
-        releaseSecTask(task)
-    }
-
-    guard let entitlement = SecTaskCopyValueForEntitlement(task, ent as NSString, nil) else {
-        return false
-    }
-
-    if let number = entitlement as? NSNumber {
-        return number.boolValue
-    } else if let bool = entitlement as? Bool {
-        return bool
-    }
-
-    return false
+    return ret
 }
 
 func getEntitlement(_ ent: String) -> String {
-    guard let task = SecTaskCreateFromSelf(nil) else {
-        return ""
+    var ret: String = ""
+    withSecEntitlement(for: ent) { entitlement in
+        if let entitlement = entitlement as? String {
+            ret = entitlement
+        } else if let entitlement = entitlement as? NSString as? String {
+            ret = entitlement
+        }
     }
-    defer {
-        releaseSecTask(task)
-    }
-    
-    guard let entitlement = SecTaskCopyValueForEntitlement(
-        task,
-        ent as NSString,
-        nil
-    ) else {
-        return ""
-    }
-    
-    if let appGroupsArray = entitlement as? String {
-        return appGroupsArray
-    } else if let appGroupsNSArray = entitlement as? NSString as? String {
-        return appGroupsNSArray
-    }
-    
-    return ""
+    return ret
 }
-
 
 func getAppGroups() -> [String] {
-    guard let task = SecTaskCreateFromSelf(nil) else {
-        return []
+    var ret: [String] = []
+    withSecEntitlement(for: "com.apple.security.application-groups") { groups in
+        if let groups = groups as? [String] {
+            ret = groups
+        } else if let groups = groups as? NSArray as? [String] {
+            ret = groups
+        } else if CFGetTypeID(groups) == CFArrayGetTypeID() {
+            ret = groups as! CFArray as NSArray as? [String] ?? []
+        }
     }
-    defer {
-        releaseSecTask(task)
-    }
-
-    guard let entitlement = SecTaskCopyValueForEntitlement(
-        task,
-        "com.apple.security.application-groups" as NSString,
-        nil
-    ) else {
-        return []
-    }
-
-    if let appGroupsArray = entitlement as? [String] {
-        return appGroupsArray
-    } else if let appGroupsNSArray = entitlement as? NSArray as? [String] {
-        return appGroupsNSArray
-    } else if CFGetTypeID(entitlement) == CFArrayGetTypeID() {
-        let cfArray = entitlement as! CFArray
-        return (cfArray as NSArray) as? [String] ?? []
-    }
-
-    return []
+    return ret
 }
-
-
